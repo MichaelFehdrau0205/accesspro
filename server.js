@@ -74,6 +74,14 @@ const server = http.createServer((req, res) => {
   });
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('\nPort ' + PORT + ' is already in use. Access Pro is probably already open at http://localhost:' + PORT + '\n');
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\nAccess Pro is running.\n');
   console.log('  On this computer:  http://localhost:' + PORT);

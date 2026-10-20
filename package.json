@@ -2,6 +2,6 @@
   "name": "accesspro",
   "version": "0.1.0",
   "description": "Access Pro: phone app, QR scan check-in, kiosk and staff screen (hackathon demo)",
-  "scripts": { "start": "node server.js" },
+  "scripts": { "dev": "node server.js", "start": "node server.js" },
   "license": "MIT"
 }

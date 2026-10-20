@@ -44,6 +44,9 @@
   .nav .in { max-width: 480px; margin: 0 auto; display: flex; gap: 10px; }
   .listen { border: 2px dashed var(--line); border-radius: 14px; padding: 16px; background: #fff; text-align: center; }
   .listen .big { font-size: 20px; font-weight: 700; }
+  .micline { margin: 0 0 10px; font-weight: 700; font-size: 16px; color: var(--ok); }
+  .micline.wait { color: var(--warn); }
+  .micline.bad { color: #9b1c1c; }
   .meter { height: 8px; background: #e3e8f4; border-radius: 8px; overflow: hidden; margin: 12px 0 0; }
   .meter > i { display: block; height: 100%; width: 0; background: var(--brand); transition: width .2s linear; }
   .ask { border: 3px solid var(--brand); border-radius: 14px; padding: 16px; background: #fff; margin-top: 12px; }
@@ -95,20 +98,21 @@
     <h2 id="h2a">How do you want to communicate?</h2>
     <p class="hint">Speak, type, or stay quiet. If you stay quiet, we will ask you. We will never assume.</p>
     <div class="listen" id="listenBox">
+      <p class="micline wait" id="micStatus" role="status">Allow the microphone on this Mac…</p>
       <div class="big" id="listenState">Ready</div>
-      <p class="note" id="listenNote">Tap Start, then say hello in your language, or type below.</p>
+      <p class="note" id="listenNote">The microphone turns on first. Start stays off until it is ready.</p>
       <div class="meter" aria-hidden="true"><i id="meterBar"></i></div>
-      <div class="row"><button class="btn" id="startBtn">Start</button></div>
+      <div class="row"><button class="btn" id="startBtn" type="button" disabled>Start</button></div>
+      <div class="ask" id="askDeaf" hidden role="alert">
+        <h3>Hello. Are you Deaf or hard of hearing? Do you use ASL?</h3>
+        <div class="row">
+          <button class="btn" id="deafYes" type="button">Yes</button>
+          <button class="btn alt" id="deafNo" type="button">No</button>
+        </div>
+      </div>
     </div>
     <label class="f" for="typed">Or type in your language</label>
     <input type="text" id="typed" autocomplete="off" placeholder="Hello / Hola / 你好 / Здравствуйте">
-    <div class="ask" id="askDeaf" hidden role="alert">
-      <h3>Hello. Are you Deaf or hard of hearing? Do you use ASL?</h3>
-      <div class="row">
-        <button class="btn" id="deafYes">Yes</button>
-        <button class="btn alt" id="deafNo">No</button>
-      </div>
-    </div>
     <p class="hint" style="margin-top:14px">Language for your request and card:</p>
     <div class="langs" id="langs" role="group" aria-label="Language"></div>
     <p class="note" id="langNote"></p>
@@ -190,8 +194,54 @@
 
   /* ---------- Step 2: talk (speak / silence / type) ---------- */
   var SILENCE_MS = 6000, timer = null, tick = null, recog = null, listening = false;
+  var micStream = null, micReady = false, listenGen = 0;
 
   function setState(big, note) { $('listenState').textContent = big; $('listenNote').textContent = note; }
+  function setMic(text, kind) {
+    var el = $('micStatus');
+    el.textContent = text;
+    el.className = 'micline' + (kind ? ' ' + kind : '');
+  }
+  function releaseMic() {
+    if (!micStream) return;
+    micStream.getTracks().forEach(function (t) { t.stop(); });
+    micStream = null;
+  }
+  function showDeafAsk(big, note) {
+    askedDeaf = true;
+    $('askDeaf').hidden = false;
+    setState(big, note);
+    $('deafYes').focus();
+  }
+  /* Ask macOS for the microphone before Start can be pressed. */
+  function prepareMic() {
+    micReady = false;
+    $('startBtn').disabled = true;
+    $('startBtn').textContent = 'Start';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMic('This browser has no microphone. Type below, or tap Start and wait.', 'bad');
+      micReady = true;
+      $('startBtn').disabled = false;
+      setState('Ready', 'Tap Start and stay quiet. We will ask you a question.');
+      return;
+    }
+    setMic('Allow the microphone on this Mac…', 'wait');
+    setState('Ready', 'The microphone turns on first. Start stays off until it is ready.');
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      releaseMic();
+      micStream = stream;
+      micReady = true;
+      $('startBtn').disabled = false;
+      setMic('Microphone ready', '');
+      setState('Ready', 'Tap Start. Say hello in your language, or stay quiet and we will ask.');
+    }).catch(function () {
+      micReady = false;
+      $('startBtn').disabled = false;
+      $('startBtn').textContent = 'Allow microphone';
+      setMic('Microphone is blocked. Tap Allow microphone.', 'bad');
+      setState('Microphone needed', 'Allow the microphone, then tap Start.');
+    });
+  }
   function renderLangs() {
     var box = $('langs'); box.innerHTML = '';
     Object.keys(AP.LANGS).forEach(function (code) {
@@ -206,39 +256,64 @@
     $('langNote').textContent = why || '';
   }
   function stopListening() {
-    listening = false; clearTimeout(timer); clearInterval(tick); $('meterBar').style.width = '0';
-    if (recog) { try { recog.stop(); } catch (e) { /* ignore */ } }
-    $('startBtn').textContent = 'Start';
+    listening = false; listenGen++; clearTimeout(timer); clearInterval(tick); $('meterBar').style.width = '0';
+    if (recog) { try { recog.onend = null; recog.stop(); } catch (e) { /* ignore */ } }
+    $('startBtn').textContent = micReady ? 'Start' : 'Allow microphone';
   }
   function heard(text, how) {
     var code = AP.detectLang(text);
     if (code) setLang(code, 'We guessed ' + AP.LANGS[code].name + ' from what you ' + how + '. Change it above if that is wrong.');
     stopListening();
-    $('askDeaf').hidden = true;
-    setState('Got it', 'Language set. Tap Next.');
+    showDeafAsk('Got it', 'Language set. Please answer the question below.');
   }
   function startListening() {
-    if (listening) { stopListening(); setState('Ready', 'Tap Start, then say hello in your language, or type below.'); return; }
-    listening = true; $('askDeaf').hidden = true; $('startBtn').textContent = 'Stop';
-    setState('Listening…', 'Say hello, or type below. If you stay quiet we will ask you a question.');
+    if (!micReady) { prepareMic(); return; }
+    if ($('startBtn').textContent === 'Allow microphone') { prepareMic(); return; }
+    if (listening) {
+      stopListening();
+      setMic('Microphone ready', '');
+      setState('Ready', 'Tap Start. Say hello in your language, or stay quiet and we will ask.');
+      return;
+    }
+    releaseMic();
+    var gen = ++listenGen;
+    listening = true; $('askDeaf').hidden = true; $('startBtn').disabled = false; $('startBtn').textContent = 'Stop';
+    setMic('Microphone ready', '');
+    setState('Listening…', 'Say hello, or stay quiet. If you stay quiet we will ask you a question.');
     var t0 = Date.now();
     tick = setInterval(function () { $('meterBar').style.width = Math.min(100, (Date.now() - t0) / SILENCE_MS * 100) + '%'; }, 200);
     timer = setTimeout(function () { // silence: ask, do not assume
-      stopListening(); askedDeaf = true; $('askDeaf').hidden = false;
-      setState('We did not hear anything', 'That is fine. Please answer the question below.');
-      $('deafYes').focus();
+      if (gen !== listenGen) return;
+      stopListening();
+      showDeafAsk('We did not hear anything', 'That is fine. Please answer the question below.');
     }, SILENCE_MS);
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SR) {
-      try {
-        recog = new SR(); recog.lang = AP.LANGS[profile.lang].speech; recog.interimResults = false; recog.maxAlternatives = 1;
-        recog.onresult = function (e) { var txt = e.results[0][0].transcript; if (txt) heard(txt, 'said'); };
-        recog.onerror = function () { /* keep waiting; silence timer will ask */ };
-        recog.start();
-      } catch (e) { /* typing still works */ }
-    } else {
+    if (!SR) {
       $('listenNote').textContent = 'This browser cannot listen. Type below, or stay quiet and we will ask.';
+      return;
     }
+    try {
+      recog = new SR(); recog.lang = AP.LANGS[profile.lang].speech; recog.interimResults = false; recog.maxAlternatives = 1;
+      recog.onresult = function (e) {
+        if (gen !== listenGen) return;
+        var txt = (e.results[0][0].transcript || '').trim();
+        if (txt.length < 2) return;
+        heard(txt, 'said');
+      };
+      recog.onerror = function (ev) {
+        var code = ev && ev.error;
+        if (code === 'not-allowed' || code === 'service-not-allowed') {
+          micReady = false;
+          setMic('Microphone is blocked. Allow it for this site, then tap Allow microphone.', 'bad');
+        }
+        /* no-speech and other errors: the silence timer still asks */
+      };
+      recog.onend = function () {
+        if (!listening || gen !== listenGen) return;
+        try { recog.start(); } catch (e) { /* silence timer still asks */ }
+      };
+      recog.start();
+    } catch (e) { /* typing still works; silence timer still asks */ }
   }
   $('startBtn').addEventListener('click', startListening);
   var typedTimer = null;
@@ -313,6 +388,11 @@
     $('back').style.visibility = n === 1 ? 'hidden' : 'visible';
     $('next').style.display = (n === 3 || n === 4) ? 'none' : '';
     $('back').style.flex = n === 4 ? '1' : '';
+    if (n === 2) {
+      $('askDeaf').hidden = true;
+      setState('Ready', 'The microphone turns on first. Start stays off until it is ready.');
+      prepareMic();
+    } else releaseMic();
     if (n === 4) renderResult();
     window.scrollTo(0, 0);
   }
