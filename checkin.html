@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Access Pro: check in</title>
+<style>
+  :root { --bg:#f4f6fb; --ink:#0b1b33; --muted:#4a5a75; --card:#fff; --line:#c9d2e3; --brand:#1f4fd8; --ok:#0a7a3d; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .app { max-width: 480px; margin: 0 auto; padding: 16px 16px 40px; }
+  h1 { font-size: 24px; margin: 4px 0 2px; }
+  .where { color: var(--muted); margin: 0 0 14px; }
+  .langs { display:flex; flex-wrap:wrap; gap:8px; margin: 0 0 14px; }
+  .pick { min-height:44px; padding:6px 14px; border:2px solid var(--line); border-radius:999px; background:#fff; font:inherit; color:inherit; cursor:pointer; }
+  .pick[aria-pressed="true"] { border-color: var(--brand); background:#e8eeff; font-weight:700; }
+  .grid { display:grid; gap:10px; }
+  .check { display:flex; align-items:center; gap:12px; min-height:56px; padding:10px 14px; border:2px solid var(--line); border-radius:12px; background:#fff; cursor:pointer; }
+  .check input { width:26px; height:26px; flex:none; accent-color: var(--brand); }
+  .check:has(input:checked) { border-color: var(--brand); background:#e8eeff; font-weight:600; }
+  label.f { display:block; font-weight:600; margin:14px 0 6px; }
+  input[type=text], textarea { width:100%; font:inherit; padding:12px; border:2px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); }
+  textarea { min-height:64px; }
+  .btn { width:100%; min-height:56px; margin-top:16px; padding:12px; border-radius:12px; border:2px solid var(--brand); background:var(--brand); color:#fff; font:inherit; font-weight:800; font-size:19px; cursor:pointer; }
+  .btn[disabled] { opacity:.5; }
+  .note { font-size:14px; color:var(--muted); }
+  .status { text-align:center; padding:26px 16px; border-radius:16px; background:#000; color:#ffe600; margin-top:12px; }
+  .status .big { font-size: clamp(28px, 7vw, 40px); font-weight:800; line-height:1.15; }
+  .status .small { color:#fff; margin-top:10px; }
+  .status.helping { background:#0a7a3d; color:#fff; }
+  .status.done { background:#1f4fd8; color:#fff; }
+  [hidden] { display:none !important; }
+  :focus-visible { outline: 4px solid #ff9f1c; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="form">
+    <h1 id="title">Check in</h1>
+    <p class="where" id="where"></p>
+    <div class="langs" id="langs" role="group" aria-label="Language"></div>
+    <p id="tickLabel" style="font-weight:700;margin:0 0 8px"></p>
+    <div class="grid" id="needs"></div>
+    <label class="f" for="preferred" id="prefLabel"></label>
+    <input type="text" id="preferred" autocomplete="off">
+    <label class="f" for="notes" id="notesLabel"></label>
+    <textarea id="notes"></textarea>
+    <p class="note" id="privacy"></p>
+    <button class="btn" id="go"></button>
+  </div>
+  <div id="sent" hidden>
+    <div class="status" id="statusBox" role="status" aria-live="polite">
+      <div class="big" id="statusBig"></div>
+      <div class="small" id="statusSmall"></div>
+    </div>
+    <p class="note" id="disc" style="text-align:center;margin-top:14px"></p>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AP = window.AccessPro, $ = function (id) { return document.getElementById(id); };
+  var UI = {
+    en: { title: 'Check in', where: function (l) { return 'You are at: ' + l; }, tick: 'Tick what you need here:', pref: 'Preferred doctor or interpreter (optional)', notes: 'Anything else? (optional)', privacy: 'Only what you tick is shared with this place. Nothing else is sent.', go: 'Check in', sent: 'Staff have been told', sentSmall: 'You do not need to speak. Please wait here.', helping: 'Someone is coming to help you', done: 'All done. Thank you.', disc: 'This is a request, not a booking.' },
+    es: { title: 'Registrarse', where: function (l) { return 'Usted está en: ' + l; }, tick: 'Marque lo que necesita aquí:', pref: 'Médico o intérprete preferido (opcional)', notes: '¿Algo más? (opcional)', privacy: 'Solo se comparte con este lugar lo que usted marque. No se envía nada más.', go: 'Registrarse', sent: 'Ya avisamos al personal', sentSmall: 'No necesita hablar. Por favor espere aquí.', helping: 'Alguien viene a ayudarle', done: 'Listo. Gracias.', disc: 'Esto es una solicitud, no una reserva.' },
+    zh: { title: '登记', where: function (l) { return '您在：' + l; }, tick: '请勾选您在这里需要的协助：', pref: '首选医生或口译员（可选）', notes: '还有其他需要吗？（可选）', privacy: '只会向本处分享您勾选的内容，不会发送其他信息。', go: '登记', sent: '已通知工作人员', sentSmall: '您不需要说话，请在这里等候。', helping: '有人正在过来帮助您', done: '已完成，谢谢。', disc: '这是一份请求，不是预约。' },
+    ru: { title: 'Регистрация', where: function (l) { return 'Вы находитесь: ' + l; }, tick: 'Отметьте, что вам здесь нужно:', pref: 'Предпочитаемый врач или переводчик (необязательно)', notes: 'Что-то ещё? (необязательно)', privacy: 'Этому месту передаётся только то, что вы отметили. Больше ничего не отправляется.', go: 'Зарегистрироваться', sent: 'Сотрудникам сообщили', sentSmall: 'Говорить не нужно. Пожалуйста, подождите здесь.', helping: 'К вам идёт помощник', done: 'Готово. Спасибо.', disc: 'Это просьба, а не бронирование.' }
+  };
+  var q = new URLSearchParams(location.search);
+  var loc = (q.get('loc') || 'This location').slice(0, 80);
+  var profile = AP.getProfile();
+  var chosen = {}; profile.needs.forEach(function (n) { chosen[n] = true; });
+  var lang = profile.lang;
+  var myId = null, poll = null;
+
+  function render() {
+    var U = UI[lang] || UI.en, L = AP.T[lang] || AP.T.en;
+    document.documentElement.lang = lang;
+    $('title').textContent = U.title; $('where').textContent = U.where(loc);
+    $('tickLabel').textContent = U.tick; $('prefLabel').textContent = U.pref; $('notesLabel').textContent = U.notes;
+    $('privacy').textContent = U.privacy; $('go').textContent = U.go;
+    var lb = $('langs'); lb.innerHTML = '';
+    Object.keys(AP.LANGS).forEach(function (c) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.textContent = AP.LANGS[c].name;
+      b.setAttribute('aria-pressed', c === lang ? 'true' : 'false');
+      b.addEventListener('click', function () { lang = c; keepText(); render(); });
+      lb.appendChild(b);
+    });
+    var nb = $('needs'); nb.innerHTML = '';
+    AP.NEED_IDS.forEach(function (id) {
+      var lab = document.createElement('label'); lab.className = 'check';
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!chosen[id];
+      cb.addEventListener('change', function () { chosen[id] = cb.checked; });
+      var sp = document.createElement('span'); sp.textContent = L.needs[id];
+      lab.appendChild(cb); lab.appendChild(sp); nb.appendChild(lab);
+    });
+  }
+  var kept = { preferred: profile.preferred, notes: profile.notes };
+  function keepText() { kept.preferred = $('preferred').value; kept.notes = $('notes').value; }
+  $('preferred').value = kept.preferred; $('notes').value = kept.notes;
+
+  $('go').addEventListener('click', function () {
+    var needs = AP.NEED_IDS.filter(function (n) { return chosen[n]; });
+    $('go').disabled = true;
+    AP.sendCheckin({ loc: loc, needs: needs, lang: lang, preferred: $('preferred').value.trim(), notes: $('notes').value.trim(), via: 'qr' }).then(function (e) {
+      myId = e.id; showSent('waiting');
+      poll = setInterval(function () {
+        AP.listCheckins().then(function (list) {
+          var me = list.filter(function (c) { return c.id === myId; })[0];
+          if (me) showSent(me.status);
+        });
+      }, 2000);
+    });
+  });
+  function showSent(status) {
+    var U = UI[lang] || UI.en;
+    $('form').hidden = true; $('sent').hidden = false;
+    $('statusBox').className = 'status' + (status === 'helping' ? ' helping' : status === 'done' ? ' done' : '');
+    $('statusBig').textContent = status === 'helping' ? U.helping : status === 'done' ? U.done : U.sent;
+    $('statusSmall').textContent = status === 'waiting' ? U.sentSmall : '';
+    $('disc').textContent = U.disc;
+    if (status === 'done') clearInterval(poll);
+  }
+  render();
+  window.__checkin = { setLang: function (c) { lang = c; render(); }, toggle: function (n, v) { chosen[n] = v; } };
+})();
+</script>
+</body>
+</html>

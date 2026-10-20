@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Access Pro</title>
+<style>
+  :root {
+    --bg: #f4f6fb; --ink: #0b1b33; --muted: #4a5a75; --card: #ffffff; --line: #c9d2e3;
+    --brand: #1f4fd8; --brand-ink: #ffffff; --ok: #0a7a3d; --warn: #8a5a00;
+    --hc-bg: #000; --hc-ink: #ffe600;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  .app { max-width: 480px; margin: 0 auto; padding: 16px 16px 96px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  h1 { font-size: 22px; margin: 0; }
+  .tag { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .steps { display: flex; gap: 6px; margin: 8px 0 16px; padding: 0; list-style: none; }
+  .steps li { flex: 1; text-align: center; font-size: 12px; padding: 6px 2px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
+  .steps li[aria-current="step"] { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); font-weight: 700; }
+  .steps li.done { color: var(--ok); border-color: var(--ok); }
+  section { display: none; }
+  section.on { display: block; }
+  h2 { font-size: 20px; margin: 4px 0 4px; }
+  .hint { color: var(--muted); font-size: 15px; margin: 0 0 12px; }
+  .grid { display: grid; gap: 10px; }
+  .check, .pick { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; font-size: 17px; }
+  .check input { width: 26px; height: 26px; flex: none; accent-color: var(--brand); }
+  .check:has(input:checked), .pick[aria-pressed="true"] { border-color: var(--brand); background: #e8eeff; font-weight: 600; }
+  .pick { width: 100%; text-align: left; font-family: inherit; color: inherit; }
+  label.f { display: block; font-weight: 600; margin: 14px 0 6px; }
+  input[type=text], textarea, select { width: 100%; font: inherit; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); }
+  textarea { min-height: 72px; resize: vertical; }
+  button { font: inherit; }
+  .btn { min-height: 52px; padding: 12px 18px; border-radius: 12px; border: 2px solid var(--brand); background: var(--brand); color: var(--brand-ink); font-weight: 700; cursor: pointer; width: 100%; }
+  .btn.alt { background: #fff; color: var(--brand); }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  .row > * { flex: 1; }
+  :focus-visible { outline: 4px solid #ff9f1c; outline-offset: 2px; }
+  .nav { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .nav .in { max-width: 480px; margin: 0 auto; display: flex; gap: 10px; }
+  .listen { border: 2px dashed var(--line); border-radius: 14px; padding: 16px; background: #fff; text-align: center; }
+  .listen .big { font-size: 20px; font-weight: 700; }
+  .meter { height: 8px; background: #e3e8f4; border-radius: 8px; overflow: hidden; margin: 12px 0 0; }
+  .meter > i { display: block; height: 100%; width: 0; background: var(--brand); transition: width .2s linear; }
+  .ask { border: 3px solid var(--brand); border-radius: 14px; padding: 16px; background: #fff; margin-top: 12px; }
+  .ask h3 { margin: 0 0 8px; font-size: 20px; }
+  .chip { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #e8eeff; color: var(--brand); font-weight: 700; font-size: 14px; }
+  .langs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+  .langs .pick { width: auto; min-height: 44px; padding: 6px 14px; }
+  .req { white-space: pre-wrap; background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 14px; }
+  .mini { background: var(--hc-bg); color: var(--hc-ink); border-radius: 14px; padding: 16px; margin: 12px 0; }
+  .mini b { display: block; font-size: 20px; }
+  .note { font-size: 13px; color: var(--muted); }
+  .sr { position: absolute; left: -9999px; }
+  /* Full-screen card */
+  #cardFS { position: fixed; inset: 0; background: var(--hc-bg); color: var(--hc-ink); display: none; flex-direction: column; justify-content: center; padding: 28px; z-index: 50; text-align: center; }
+  #cardFS.on { display: flex; }
+  #cardFS .t { font-size: clamp(30px, 8vw, 54px); font-weight: 800; line-height: 1.15; margin: 0 0 20px; }
+  #cardFS .l { font-size: clamp(18px, 4vw, 26px); opacity: .9; margin: 14px 0 4px; }
+  #cardFS .n { font-size: clamp(26px, 6.5vw, 44px); font-weight: 800; line-height: 1.25; }
+  #cardFS .d { font-size: 15px; margin-top: 28px; opacity: .85; }
+  #cardFS button { margin-top: 24px; align-self: center; background: var(--hc-ink); color: #000; border: 0; border-radius: 12px; padding: 14px 28px; font-weight: 800; font-size: 18px; min-height: 52px; }
+  @media (prefers-reduced-motion: reduce) { .meter > i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Access Pro</h1>
+    <span class="chip" id="saved" aria-live="polite">Saved on this phone</span>
+  </header>
+  <p class="tag">Your access needs, ready on the spot.</p>
+
+  <ol class="steps" id="steps" aria-label="Steps">
+    <li data-s="1">1 Needs</li><li data-s="2">2 Talk</li><li data-s="3">3 Where</li><li data-s="4">4 Card</li>
+  </ol>
+
+  <!-- 1. NEEDS -->
+  <section id="s1" class="on" aria-labelledby="h1a">
+    <h2 id="h1a">What do you need?</h2>
+    <p class="hint">Set this once. It is saved on this phone and used everywhere.</p>
+    <div class="grid" id="needs"></div>
+    <label class="f" for="preferred">Preferred doctor, clinic or interpreter (optional)</label>
+    <input type="text" id="preferred" autocomplete="off" placeholder="For example: Dr. Rivera, or the same ASL interpreter">
+    <label class="f" for="notes">Anything else we should know? (optional)</label>
+    <textarea id="notes" placeholder="For example: due in two weeks, or I get anxious in loud rooms"></textarea>
+  </section>
+
+  <!-- 2. TALK -->
+  <section id="s2" aria-labelledby="h2a">
+    <h2 id="h2a">How do you want to communicate?</h2>
+    <p class="hint">Speak, type, or stay quiet. If you stay quiet, we will ask you. We will never assume.</p>
+    <div class="listen" id="listenBox">
+      <div class="big" id="listenState">Ready</div>
+      <p class="note" id="listenNote">Tap Start, then say hello in your language, or type below.</p>
+      <div class="meter" aria-hidden="true"><i id="meterBar"></i></div>
+      <div class="row"><button class="btn" id="startBtn">Start</button></div>
+    </div>
+    <label class="f" for="typed">Or type in your language</label>
+    <input type="text" id="typed" autocomplete="off" placeholder="Hello / Hola / 你好 / Здравствуйте">
+    <div class="ask" id="askDeaf" hidden role="alert">
+      <h3>Hello. Are you Deaf or hard of hearing? Do you use ASL?</h3>
+      <div class="row">
+        <button class="btn" id="deafYes">Yes</button>
+        <button class="btn alt" id="deafNo">No</button>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:14px">Language for your request and card:</p>
+    <div class="langs" id="langs" role="group" aria-label="Language"></div>
+    <p class="note" id="langNote"></p>
+  </section>
+
+  <!-- 3. WHERE -->
+  <section id="s3" aria-labelledby="h3a">
+    <h2 id="h3a">Where are you going?</h2>
+    <p class="hint">Pick the place. The wording changes to fit it.</p>
+    <div class="grid" id="sits"></div>
+  </section>
+
+  <!-- 4. CARD -->
+  <section id="s4" aria-labelledby="h4a">
+    <h2 id="h4a">Your request and card</h2>
+    <p class="hint" id="srcNote"></p>
+    <div class="mini" id="miniCard" aria-live="polite"></div>
+    <div class="row">
+      <button class="btn" id="showCard">Show card to staff</button>
+    </div>
+    <h2 style="margin-top:18px">Written request</h2>
+    <div class="req" id="reqText" aria-live="polite"></div>
+    <div class="row">
+      <button class="btn alt" id="copyReq">Copy request</button>
+      <button class="btn alt" id="again">Change place</button>
+    </div>
+    <p class="note" id="copied" aria-live="polite"></p>
+  </section>
+</div>
+
+<div class="nav"><div class="in">
+  <button class="btn alt" id="back">Back</button>
+  <button class="btn" id="next">Next</button>
+</div></div>
+
+<div id="cardFS" role="dialog" aria-modal="true" aria-label="Access card for staff">
+  <p class="t" id="fsTitle"></p>
+  <div class="l" id="fsPleaseL"></div><div class="n" id="fsNeeds"></div>
+  <div class="l" id="fsHereL"></div><div class="n" id="fsSit"></div>
+  <div class="d" id="fsDisc"></div>
+  <button id="fsClose">Close</button>
+</div>
+
+<script src="shared.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AP = window.AccessPro;
+  // Each visit starts blank. A previous person's checks must not stay on.
+  var profile = { needs: [], lang: 'en', preferred: '', notes: '' };
+  AP.saveProfile(profile);
+  var step = 1, sitId = null, result = null, askedDeaf = false;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- Step 1: needs ---------- */
+  function renderNeeds() {
+    var box = $('needs'); box.innerHTML = '';
+    AP.NEED_IDS.forEach(function (id) {
+      var lab = document.createElement('label'); lab.className = 'check';
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = id; cb.checked = profile.needs.indexOf(id) > -1;
+      cb.addEventListener('change', function () { toggleNeed(id, cb.checked); });
+      var sp = document.createElement('span'); sp.textContent = AP.T.en.needs[id];
+      lab.appendChild(cb); lab.appendChild(sp); box.appendChild(lab);
+    });
+    $('preferred').value = profile.preferred; $('notes').value = profile.notes;
+  }
+  function toggleNeed(id, on) {
+    var i = profile.needs.indexOf(id);
+    if (on && i < 0) profile.needs.push(id);
+    if (!on && i > -1) profile.needs.splice(i, 1);
+    persist();
+  }
+  function persist() {
+    profile.preferred = $('preferred').value.trim(); profile.notes = $('notes').value.trim();
+    AP.saveProfile(profile);
+  }
+  $('preferred').addEventListener('input', persist);
+  $('notes').addEventListener('input', persist);
+
+  /* ---------- Step 2: talk (speak / silence / type) ---------- */
+  var SILENCE_MS = 6000, timer = null, tick = null, recog = null, listening = false;
+
+  function setState(big, note) { $('listenState').textContent = big; $('listenNote').textContent = note; }
+  function renderLangs() {
+    var box = $('langs'); box.innerHTML = '';
+    Object.keys(AP.LANGS).forEach(function (code) {
+      var b = document.createElement('button'); b.className = 'pick'; b.type = 'button';
+      b.textContent = AP.LANGS[code].name; b.setAttribute('aria-pressed', profile.lang === code ? 'true' : 'false');
+      b.addEventListener('click', function () { setLang(code, 'You picked this language.'); });
+      box.appendChild(b);
+    });
+  }
+  function setLang(code, why) {
+    profile.lang = code; persist(); renderLangs();
+    $('langNote').textContent = why || '';
+  }
+  function stopListening() {
+    listening = false; clearTimeout(timer); clearInterval(tick); $('meterBar').style.width = '0';
+    if (recog) { try { recog.stop(); } catch (e) { /* ignore */ } }
+    $('startBtn').textContent = 'Start';
+  }
+  function heard(text, how) {
+    var code = AP.detectLang(text);
+    if (code) setLang(code, 'We guessed ' + AP.LANGS[code].name + ' from what you ' + how + '. Change it above if that is wrong.');
+    stopListening();
+    $('askDeaf').hidden = true;
+    setState('Got it', 'Language set. Tap Next.');
+  }
+  function startListening() {
+    if (listening) { stopListening(); setState('Ready', 'Tap Start, then say hello in your language, or type below.'); return; }
+    listening = true; $('askDeaf').hidden = true; $('startBtn').textContent = 'Stop';
+    setState('Listening…', 'Say hello, or type below. If you stay quiet we will ask you a question.');
+    var t0 = Date.now();
+    tick = setInterval(function () { $('meterBar').style.width = Math.min(100, (Date.now() - t0) / SILENCE_MS * 100) + '%'; }, 200);
+    timer = setTimeout(function () { // silence: ask, do not assume
+      stopListening(); askedDeaf = true; $('askDeaf').hidden = false;
+      setState('We did not hear anything', 'That is fine. Please answer the question below.');
+      $('deafYes').focus();
+    }, SILENCE_MS);
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      try {
+        recog = new SR(); recog.lang = AP.LANGS[profile.lang].speech; recog.interimResults = false; recog.maxAlternatives = 1;
+        recog.onresult = function (e) { var txt = e.results[0][0].transcript; if (txt) heard(txt, 'said'); };
+        recog.onerror = function () { /* keep waiting; silence timer will ask */ };
+        recog.start();
+      } catch (e) { /* typing still works */ }
+    } else {
+      $('listenNote').textContent = 'This browser cannot listen. Type below, or stay quiet and we will ask.';
+    }
+  }
+  $('startBtn').addEventListener('click', startListening);
+  var typedTimer = null;
+  $('typed').addEventListener('input', function () {
+    clearTimeout(typedTimer);
+    var v = this.value;
+    typedTimer = setTimeout(function () { if (v.trim().length > 1) heard(v, 'typed'); }, 500);
+  });
+  $('deafYes').addEventListener('click', function () {
+    ['asl', 'written'].forEach(function (id) { if (profile.needs.indexOf(id) < 0) profile.needs.push(id); });
+    persist(); renderNeeds(); $('askDeaf').hidden = true;
+    setState('Thank you', 'We added an ASL interpreter and written communication to your needs. You can change them on step 1.');
+  });
+  $('deafNo').addEventListener('click', function () {
+    $('askDeaf').hidden = true; setState('Thank you', 'No changes made. Choose your language below, or type.');
+  });
+
+  /* ---------- Step 3: where ---------- */
+  function renderSits() {
+    var box = $('sits'); box.innerHTML = '';
+    AP.SIT_IDS.forEach(function (id) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'pick';
+      b.textContent = AP.T.en.sits[id]; b.setAttribute('aria-pressed', sitId === id ? 'true' : 'false');
+      b.addEventListener('click', function () { sitId = id; renderSits(); go(4); });
+      box.appendChild(b);
+    });
+  }
+
+  /* ---------- Step 4: result ---------- */
+  function renderResult() {
+    $('reqText').textContent = 'Writing your request…';
+    AP.generate(profile, sitId, profile.lang).then(function (r) {
+      result = r;
+      var c = r.card;
+      $('miniCard').innerHTML = '<b>' + AP.esc(c.title) + '</b>' + AP.esc(c.pleaseLabel) + ' ' + AP.esc(c.needs.join(', ') || '—') +
+        '<br>' + AP.esc(c.hereLabel) + ' ' + AP.esc(c.situation);
+      $('reqText').textContent = r.request;
+      $('srcNote').textContent = r.source === 'ai' ? 'Written by AI for this place.' : 'Built from your profile. (AI service not connected, so this used the built-in wording.)';
+    });
+  }
+  $('showCard').addEventListener('click', function () {
+    if (!result) return;
+    var c = result.card;
+    $('fsTitle').textContent = c.title; $('fsPleaseL').textContent = c.pleaseLabel; $('fsNeeds').textContent = c.needs.join(' · ') || '—';
+    $('fsHereL').textContent = c.hereLabel; $('fsSit').textContent = c.situation + (c.preferred ? ' · ' + c.preferred : '');
+    $('fsDisc').textContent = c.disclaimer; $('cardFS').classList.add('on'); $('fsClose').focus();
+  });
+  $('fsClose').addEventListener('click', function () { $('cardFS').classList.remove('on'); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') $('cardFS').classList.remove('on'); });
+  $('copyReq').addEventListener('click', function () {
+    if (!result) return;
+    var done = function (ok) { $('copied').textContent = ok ? 'Copied.' : 'Could not copy. Press and hold the text to copy it.'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(result.request).then(function () { done(true); }, function () { done(false); });
+    else done(false);
+  });
+  $('again').addEventListener('click', function () { go(3); });
+
+  /* ---------- Navigation ---------- */
+  function go(n) {
+    stopListening();
+    if (n === 1 && step !== 1) { // back to page 1: reset to original so the next person starts blank
+      profile = { needs: [], lang: 'en', preferred: '', notes: '' };
+      AP.saveProfile(profile); renderNeeds(); askedDeaf = false;
+    }
+    step = n;
+    for (var i = 1; i <= 4; i++) $('s' + i).classList.toggle('on', i === n);
+    [].forEach.call($('steps').children, function (li) {
+      var s = +li.getAttribute('data-s');
+      li.removeAttribute('aria-current'); li.classList.toggle('done', s < n);
+      if (s === n) li.setAttribute('aria-current', 'step');
+    });
+    $('back').style.visibility = n === 1 ? 'hidden' : 'visible';
+    $('next').style.display = (n === 3 || n === 4) ? 'none' : '';
+    $('back').style.flex = n === 4 ? '1' : '';
+    if (n === 4) renderResult();
+    window.scrollTo(0, 0);
+  }
+  $('next').addEventListener('click', function () { persist(); go(step + 1); });
+  $('back').addEventListener('click', function () { go(step - 1); });
+
+  renderNeeds(); renderLangs(); renderSits(); go(1);
+  window.__ap = { go: go, getProfile: function () { return profile; }, getResult: function () { return result; }, heard: heard };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access Pro: scan to check in</title>
+<style>
+  :root { --bg:#000; --ink:#ffe600; --white:#fff; --line:#5a5a5a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); font:18px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; min-height:100%; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 20px 40px; text-align: center; }
+  h1 { font-size: clamp(30px, 6vw, 52px); line-height: 1.1; margin: 8px 0 8px; font-weight: 800; }
+  .sub { color: var(--white); font-size: clamp(18px, 3vw, 24px); margin: 0 0 20px; }
+  .qr { background:#fff; display:inline-block; padding:16px; border-radius:16px; line-height:0; }
+  .qr svg { width: min(72vw, 360px); height: min(72vw, 360px); }
+  .steps { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin:24px 0 8px; padding:0; list-style:none; color:var(--white); }
+  .steps li { border:2px solid var(--line); border-radius:12px; padding:10px 14px; font-size:17px; }
+  .steps b { color: var(--ink); }
+  .langs { color:var(--white); margin: 8px 0 0; font-size: 16px; }
+  details { margin-top: 28px; text-align:left; color:var(--white); border:1px solid var(--line); border-radius:12px; padding:12px 16px; }
+  summary { cursor:pointer; color:var(--ink); font-weight:700; }
+  label { display:block; margin:12px 0 4px; font-weight:600; }
+  input, select { width:100%; font:inherit; padding:10px; border-radius:10px; border:2px solid var(--line); background:#111; color:#fff; }
+  .warn { color:#ffb347; font-size:15px; margin-top:8px; }
+  a { color: var(--ink); }
+  .link { word-break: break-all; font-size: 14px; color:#bbb; margin-top:10px; }
+  :focus-visible { outline: 4px solid #ff9f1c; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Scan to check in</h1>
+  <p class="sub" id="where">Tell us what you need. No talking required.</p>
+  <div class="qr" id="qr" role="img" aria-label="QR code. Scan it with your phone camera to check in."></div>
+  <div class="link" id="linkText"></div>
+  <ul class="steps">
+    <li><b>1</b> Open your camera</li>
+    <li><b>2</b> Scan the code</li>
+    <li><b>3</b> Tick what you need</li>
+    <li><b>4</b> Staff are told</li>
+  </ul>
+  <p class="langs">English · Español · 中文 · Русский · No app needed</p>
+
+  <details>
+    <summary>Staff setup (not shown to the public)</summary>
+    <label for="loc">This location</label>
+    <select id="loc">
+      <option>Hospital reception</option>
+      <option>Clinic front desk</option>
+      <option>MTA station</option>
+      <option>Airport help desk</option>
+      <option>Housing office</option>
+      <option>Court clerk</option>
+    </select>
+    <label for="base">Address phones will open</label>
+    <input id="base" type="text" inputmode="url" autocomplete="off">
+    <p class="warn" id="warn" hidden></p>
+    <p style="margin-top:12px"><a id="testLink" href="#" target="_blank" rel="noopener">Open the check-in page myself</a> ·
+      <a href="staff.html" target="_blank" rel="noopener">Open the staff screen</a></p>
+  </details>
+</main>
+
+<script src="qrcode.js"></script>
+<script src="shared.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var AP = window.AccessPro;
+
+  function currentUrl() {
+    var base = $('base').value.trim().replace(/\/+$/, '');
+    return base + '/checkin.html?loc=' + encodeURIComponent($('loc').value);
+  }
+  function draw() {
+    var url = currentUrl();
+    try {
+      var qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+      $('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
+    } catch (e) { $('qr').textContent = 'Could not draw the code.'; }
+    $('linkText').textContent = url;
+    $('testLink').href = url;
+    $('where').textContent = $('loc').value + ': tell us what you need. No talking required.';
+    var local = /localhost|127\.0\.0\.1/.test(url) || location.protocol === 'file:';
+    $('warn').hidden = !local;
+    $('warn').textContent = local ? 'A phone cannot open "localhost". Replace it with the Wi-Fi address that "node server.js" prints, for example http://192.168.1.20:3000' : '';
+  }
+  $('loc').addEventListener('change', draw);
+  $('base').addEventListener('input', draw);
+
+  // Pre-fill the address: the Wi-Fi address from the server if there is one.
+  var start = location.protocol === 'file:' ? 'http://192.168.1.20:3000' : location.origin;
+  $('base').value = start; draw();
+  AP.ping().then(function (on) {
+    if (!on) return;
+    var info = AP.serverInfo();
+    if (info.lan && info.lan.length && /localhost|127\.0\.0\.1/.test($('base').value)) { $('base').value = info.lan[0]; draw(); }
+  });
+  window.__scan = { currentUrl: currentUrl };
+})();
+</script>
+</body>
+</html>

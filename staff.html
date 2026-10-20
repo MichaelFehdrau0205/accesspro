@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access Pro: staff screen</title>
+<style>
+  :root { --bg:#0b1b33; --card:#13294b; --ink:#fff; --muted:#b9c6de; --accent:#ffe600; --ok:#2fbf71; --brand:#6ea0ff; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); font:18px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  body.flash { animation: flash 0.9s ease-out 2; }
+  @keyframes flash { 0%,100% { background:var(--bg); } 40% { background:#7a5b00; } }
+  @media (prefers-reduced-motion: reduce) { body.flash { animation:none; } }
+  main { max-width: 900px; margin:0 auto; padding: 20px 16px 40px; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  h1 { font-size: 28px; margin:0; }
+  .count { background:var(--accent); color:#000; font-weight:800; border-radius:999px; padding:4px 14px; }
+  .toggle { color:var(--muted); font-size:15px; display:flex; gap:8px; align-items:center; }
+  .empty { color:var(--muted); padding:40px 0; text-align:center; font-size:20px; }
+  ul { list-style:none; padding:0; margin:16px 0 0; display:grid; gap:14px; }
+  li { background:var(--card); border-radius:16px; padding:16px; border-left:8px solid var(--accent); }
+  li.helping { border-left-color: var(--brand); }
+  li.done { border-left-color: var(--ok); opacity:.75; }
+  .top { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:15px; }
+  .need { font-size: clamp(22px, 4vw, 30px); font-weight:800; margin:6px 0 4px; }
+  .meta { color:var(--muted); font-size:16px; }
+  .meta b { color:#fff; }
+  .acts { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  button { font:inherit; min-height:48px; padding:8px 18px; border-radius:12px; border:2px solid var(--brand); background:transparent; color:#fff; font-weight:700; cursor:pointer; }
+  button.primary { background:var(--brand); color:#001; }
+  button[disabled] { opacity:.4; cursor:default; }
+  :focus-visible { outline:4px solid #ff9f1c; outline-offset:2px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>People who need help</h1>
+    <span class="count" id="count" aria-live="polite">0 waiting</span>
+  </header>
+  <label class="toggle"><input type="checkbox" id="beep"> Beep when someone checks in</label>
+  <p class="meta" id="mode"></p>
+  <div id="empty" class="empty">No one is waiting. New check-ins appear here.</div>
+  <ul id="list" aria-live="polite"></ul>
+</main>
+
+<script src="shared.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AP = window.AccessPro, $ = function (id) { return document.getElementById(id); };
+  var seen = null;
+
+  function ago(ts) {
+    var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 60) return s + ' sec ago';
+    var m = Math.round(s / 60); return m + ' min ago';
+  }
+  function beep() {
+    if (!$('beep').checked) return;
+    try {
+      var C = window.AudioContext || window.webkitAudioContext; var ctx = new C(); var o = ctx.createOscillator(); var g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; g.gain.value = 0.15; o.start(); setTimeout(function () { o.stop(); ctx.close(); }, 250);
+    } catch (e) { /* ignore */ }
+  }
+  function render(list) {
+    list = list || [];
+    var waiting = list.filter(function (c) { return c.status === 'waiting'; }).length;
+    $('count').textContent = waiting + ' waiting';
+    $('empty').hidden = list.length > 0;
+    var ul = $('list'); ul.innerHTML = '';
+    list.forEach(function (c) {
+      var li = document.createElement('li'); li.className = c.status;
+      var top = document.createElement('div'); top.className = 'top';
+      var a = document.createElement('span'); a.textContent = c.loc || 'Unknown location';
+      var b = document.createElement('span'); b.textContent = ago(c.ts) + ' · ' + c.status;
+      top.appendChild(a); top.appendChild(b);
+      var need = document.createElement('div'); need.className = 'need'; need.textContent = AP.staffLine(c);
+      li.appendChild(top); li.appendChild(need);
+      var extra = [];
+      if (c.preferred) extra.push(['Prefers', c.preferred]);
+      if (c.notes) extra.push(['Note', c.notes]);
+      if (extra.length) {
+        var m = document.createElement('div'); m.className = 'meta';
+        extra.forEach(function (e, i) { if (i) m.appendChild(document.createTextNode('  ·  ')); var bb = document.createElement('b'); bb.textContent = e[0] + ': '; m.appendChild(bb); m.appendChild(document.createTextNode(e[1])); });
+        li.appendChild(m);
+      }
+      var acts = document.createElement('div'); acts.className = 'acts';
+      [['helping', 'On my way'], ['done', 'Done']].forEach(function (p) {
+        var btn = document.createElement('button'); btn.type = 'button'; btn.textContent = p[1];
+        if (p[0] === 'helping') btn.className = 'primary';
+        btn.disabled = c.status === p[0] || (c.status === 'done');
+        btn.addEventListener('click', function () { AP.updateCheckin(c.id, p[0]).then(function () { AP.listCheckins().then(render); }); });
+        acts.appendChild(btn);
+      });
+      li.appendChild(acts); ul.appendChild(li);
+    });
+    // new arrivals: flash (for Deaf staff too) and optional beep
+    var ids = list.map(function (c) { return c.id; });
+    if (seen !== null) {
+      var fresh = ids.filter(function (id) { return seen.indexOf(id) < 0; });
+      if (fresh.length) {
+        document.body.classList.remove('flash'); void document.body.offsetWidth; document.body.classList.add('flash'); beep();
+      }
+    }
+    seen = ids;
+  }
+  AP.ping().then(function (on) {
+    $('mode').textContent = on ? 'Live: connected to the Access Pro server.' : 'Local mode: only check-ins from this same browser appear. Run "node server.js" to connect other devices.';
+  });
+  AP.watchCheckins(render);
+  window.__staff = { render: render };
+})();
+</script>
+</body>
+</html>

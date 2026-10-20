@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access Pro: welcome</title>
+<style>
+  :root { --ink:#ffe600; --white:#fff; --line:#6b6b6b; --panel:#111; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; min-height:100%; background:#000; color:var(--white); font:22px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width: 900px; margin:0 auto; padding: 28px 22px 48px; }
+  .brand { color:var(--ink); font-weight:800; font-size:20px; margin-bottom:18px; }
+  h1 { font-size: clamp(48px, 11vw, 110px); line-height:1; margin:0 0 10px; color:var(--ink); font-weight:900; }
+  .sub { font-size: clamp(20px, 3.4vw, 30px); margin:0 0 20px; }
+  .listen { border:3px dashed var(--line); border-radius:22px; padding:20px; background:var(--panel); }
+  .listen .state { font-size:30px; font-weight:900; color:var(--ink); }
+  .meter { height:12px; background:#333; border-radius:8px; overflow:hidden; margin-top:14px; }
+  .meter > i { display:block; height:100%; width:0; background:var(--ink); }
+  .ask { border:4px solid var(--ink); border-radius:24px; padding:26px; background:#1a1700; margin:20px 0; }
+  .ask .q { font-size: clamp(30px, 6vw, 54px); font-weight:900; line-height:1.15; color:var(--ink); min-height: 2.4em; }
+  .caret::after { content:"▍"; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  @media (prefers-reduced-motion: reduce) { .caret::after { animation:none; } }
+  .row { display:flex; gap:14px; flex-wrap:wrap; margin-top:18px; }
+  .btn { flex:1; min-width:180px; min-height:80px; padding:14px 26px; border-radius:18px; border:3px solid var(--ink); background:var(--ink); color:#000; font:inherit; font-weight:900; font-size:34px; cursor:pointer; }
+  .btn.alt { background:transparent; color:var(--ink); }
+  .btn.small { min-height:56px; font-size:22px; flex:none; }
+  label.f { display:block; margin-top:20px; font-weight:700; font-size:24px; }
+  input[type=text] { width:100%; font:inherit; font-size:28px; padding:16px; border-radius:16px; border:3px solid var(--line); background:#111; color:#fff; margin-top:6px; }
+  .langs { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }
+  .langs button { min-height:64px; padding:8px 24px; border-radius:999px; border:3px solid var(--line); background:var(--panel); color:#fff; font:inherit; font-size:26px; cursor:pointer; }
+  .langs button[aria-pressed="true"] { border-color:var(--ink); background:#262200; font-weight:800; }
+  .done { border:4px solid #2fbf71; border-radius:24px; padding:22px; background:#06210f; margin:20px 0; font-size:30px; font-weight:800; }
+  [hidden] { display:none !important; }
+  :focus-visible { outline:5px solid #ff9f1c; outline-offset:3px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Access Pro</div>
+  <h1 id="hello">Hello</h1>
+  <p class="sub" id="sub">Say something, type, or tap. Or just wait.</p>
+
+  <div class="listen">
+    <div class="state" id="state" role="status" aria-live="polite">Waiting…</div>
+    <div class="meter" aria-hidden="true"><i id="bar"></i></div>
+    <div class="row"><button class="btn alt small" id="mic" type="button">Use microphone</button></div>
+  </div>
+
+  <div class="ask" id="ask" hidden>
+    <div class="q caret" id="q" aria-live="polite"></div>
+    <div class="row" id="yn" hidden>
+      <button class="btn" id="yes" type="button"></button>
+      <button class="btn alt" id="no" type="button"></button>
+    </div>
+  </div>
+
+  <label class="f" for="typed" id="typedL">Type here in your language</label>
+  <input type="text" id="typed" autocomplete="off" autofocus>
+  <div class="langs" id="langs" role="group" aria-label="Language"></div>
+
+  <div class="done" id="done" hidden>
+    <div id="doneText"></div>
+    <div class="row"><button class="btn" id="cont" type="button"></button></div>
+  </div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AP = window.AccessPro, $ = function (id) { return document.getElementById(id); };
+  var q = new URLSearchParams(location.search);
+  var LOC = (q.get('loc') || 'Hospital reception').slice(0, 80);
+  var SILENCE_MS = 6000;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var UI = {
+    en: { hello: 'Hello', sub: 'Say something, type, or tap. Or just wait.', waiting: 'Waiting…', mic: 'Use microphone', listening: 'Listening…', typedL: 'Type here in your language', ask: 'Hello. Are you Deaf or hard of hearing? Do you use ASL?', yes: 'Yes', no: 'No', got: 'Got it', thanks: 'Thank you. We will help you with ASL and written notes.', thanksNo: 'Thank you. Let us continue.', cont: 'Continue' },
+    es: { hello: 'Hola', sub: 'Diga algo, escriba o toque. O espere.', waiting: 'Esperando…', mic: 'Usar micrófono', listening: 'Escuchando…', typedL: 'Escriba aquí en su idioma', ask: 'Hola. ¿Es usted sordo o con dificultad auditiva? ¿Usa ASL?', yes: 'Sí', no: 'No', got: 'Entendido', thanks: 'Gracias. Le ayudaremos con ASL y notas escritas.', thanksNo: 'Gracias. Continuemos.', cont: 'Continuar' },
+    zh: { hello: '你好', sub: '请说话、打字或点击。也可以等一等。', waiting: '等待中…', mic: '使用麦克风', listening: '正在聆听…', typedL: '请用您的语言在这里打字', ask: '您好。您是聋人或听力不佳吗？您使用ASL手语吗？', yes: '是', no: '否', got: '明白了', thanks: '谢谢。我们会用ASL手语和书面便条帮助您。', thanksNo: '谢谢，我们继续。', cont: '继续' },
+    ru: { hello: 'Здравствуйте', sub: 'Скажите что-нибудь, напишите или нажмите. Или просто подождите.', waiting: 'Ожидание…', mic: 'Включить микрофон', listening: 'Слушаем…', typedL: 'Напишите здесь на вашем языке', ask: 'Здравствуйте. Вы глухой или слабослышащий? Вы используете ASL?', yes: 'Да', no: 'Нет', got: 'Понятно', thanks: 'Спасибо. Мы поможем вам с ASL и письменными записками.', thanksNo: 'Спасибо. Продолжим.', cont: 'Продолжить' }
+  };
+  var lang = 'en', answered = null, heardAny = false, asked = false;
+  var startT = Date.now(), timer = null, tick = null, typeT = null, recog = null;
+  function U() { return UI[lang] || UI.en; }
+
+  function paint() {
+    var u = U(); document.documentElement.lang = lang;
+    $('hello').textContent = u.hello; $('sub').textContent = u.sub; $('typedL').textContent = u.typedL; $('mic').textContent = u.mic;
+    $('yes').textContent = u.yes; $('no').textContent = u.no; $('cont').textContent = u.cont;
+    if (!heardAny && !asked) $('state').textContent = u.waiting;
+    if (asked && !typeT) $('q').textContent = u.ask;
+    var lb = $('langs'); lb.innerHTML = '';
+    Object.keys(AP.LANGS).forEach(function (c) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = AP.LANGS[c].name; b.setAttribute('aria-pressed', c === lang ? 'true' : 'false');
+      b.addEventListener('click', function () { input(); lang = c; paint(); }); lb.appendChild(b);
+    });
+  }
+
+  /* The clock: no input of any kind for 6 seconds = silence. We ASK, never assume. */
+  function startClock() {
+    clearTimeout(timer); clearInterval(tick); startT = Date.now(); $('bar').style.width = '0';
+    tick = setInterval(function () { $('bar').style.width = Math.min(100, (Date.now() - startT) / SILENCE_MS * 100) + '%'; }, 100);
+    timer = setTimeout(silence, SILENCE_MS);
+  }
+  function input() { // the person did something: speak, type, tap
+    if (heardAny || asked) return;
+    heardAny = true; clearTimeout(timer); clearInterval(tick); $('bar').style.width = '100%';
+    $('state').textContent = U().got;
+  }
+  function silence() {
+    if (heardAny) return;
+    clearInterval(tick); $('bar').style.width = '100%';
+    asked = true; $('state').textContent = '';
+    $('ask').hidden = false;
+    var text = U().ask, i = 0;
+    if (reduce) { $('q').textContent = text; $('q').classList.remove('caret'); revealButtons(); return; }
+    $('q').textContent = '';
+    typeT = setInterval(function () {
+      i++; $('q').textContent = text.slice(0, i);
+      if (i >= text.length) { clearInterval(typeT); typeT = null; $('q').classList.remove('caret'); revealButtons(); }
+    }, 55);
+  }
+  function revealButtons() { $('yn').hidden = false; $('yes').focus(); }
+
+  function answer(deaf) {
+    answered = deaf; var u = U();
+    $('ask').hidden = true; $('done').hidden = false;
+    $('doneText').textContent = deaf ? u.thanks : u.thanksNo;
+    $('cont').focus();
+  }
+  $('yes').addEventListener('click', function () { answer(true); });
+  $('no').addEventListener('click', function () { answer(false); });
+
+  $('typed').addEventListener('input', function () {
+    var v = this.value; input();
+    clearTimeout(this._t);
+    this._t = setTimeout(function () {
+      var c = AP.detectLang(v); if (c && c !== lang) { lang = c; paint(); }
+    }, 400);
+  });
+  $('typed').addEventListener('keydown', function () { input(); });
+
+  $('mic').addEventListener('click', function () {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { $('state').textContent = 'This browser cannot listen. Type instead.'; return; }
+    try {
+      $('state').textContent = U().listening;
+      recog = new SR(); recog.interimResults = false; recog.maxAlternatives = 1;
+      recog.onresult = function (e) { var t = e.results[0][0].transcript; if (t) { input(); var c = AP.detectLang(t); if (c) { lang = c; paint(); } } };
+      recog.onerror = function () { /* silence clock keeps running */ };
+      recog.start();
+    } catch (e) { /* ignore */ }
+  });
+
+  $('cont').addEventListener('click', function () {
+    try { sessionStorage.setItem('accesspro.welcome', JSON.stringify({ lang: lang, deaf: answered === true })); } catch (e) { /* ignore */ }
+    location.href = 'kiosk.html?loc=' + encodeURIComponent(LOC) + '&from=welcome';
+  });
+
+  paint(); startClock();
+  window.__welcome = { state: function () { return { lang: lang, heardAny: heardAny, asked: asked, answered: answered }; } };
+})();
+</script>
+</body>
+</html>
