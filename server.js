@@ -15,7 +15,8 @@ let checkins = [];
 
 function lanAddresses() {
   const out = [];
-  const nets = os.networkInterfaces();
+  let nets = {};
+  try { nets = os.networkInterfaces() || {}; } catch (e) { return out; }
   Object.keys(nets).forEach((k) => (nets[k] || []).forEach((n) => { if (n.family === 'IPv4' && !n.internal) out.push('http://' + n.address + ':' + PORT); }));
   return out;
 }
@@ -64,10 +65,21 @@ const server = http.createServer((req, res) => {
   }
   if (p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
 
-  // static files (no path traversal)
+  // static files (no path traversal). On Vercel the pages sit beside the
+  // function or in the project root, so look in both places.
   let rel = decodeURIComponent(p === '/' ? '/index.html' : p);
-  const file = path.normalize(path.join(ROOT, rel));
-  if (file.indexOf(ROOT + path.sep) !== 0 || /node_modules|server\.js|package/.test(rel)) return send(res, 403, 'Forbidden', 'text/plain');
+  if (rel.indexOf('\0') !== -1 || /node_modules|server\.js|package/.test(rel)) return send(res, 403, 'Forbidden', 'text/plain');
+  const clean = path.normalize(rel).replace(/^[/\\]+/, '');
+  if (!clean || clean.split(/[/\\]/).indexOf('..') !== -1) return send(res, 403, 'Forbidden', 'text/plain');
+  const roots = [ROOT, process.cwd()];
+  let file = null;
+  for (let i = 0; i < roots.length; i++) {
+    const root = path.resolve(roots[i]);
+    const candidate = path.resolve(root, clean);
+    if (candidate !== root && candidate.indexOf(root + path.sep) !== 0) continue;
+    try { if (fs.statSync(candidate).isFile()) { file = candidate; break; } } catch (e) { /* next root */ }
+  }
+  if (!file) return send(res, 404, 'Not found', 'text/plain');
   fs.readFile(file, (err, buf) => {
     if (err) return send(res, 404, 'Not found', 'text/plain');
     send(res, 200, buf, MIME[path.extname(file)] || 'application/octet-stream');
